@@ -1,0 +1,913 @@
+using System;
+using System.Collections;
+using System.Configuration;
+using System.Data;
+using System.Linq;
+using System.Web;
+using System.Web.Security;
+using System.Web.UI;
+using System.Web.UI.HtmlControls;
+using System.Web.UI.WebControls;
+using System.Web.UI.WebControls.WebParts;
+using System.Xml.Linq;
+using System.Data.SqlClient;
+using AppBlock;
+using FormatFunctions;
+using System.IO;
+using ABCIPO.BusinessData;
+using System.Globalization;
+using System.Web.Script.Serialization;
+using System.Collections.Generic;
+using System.Net;
+using System.Text;
+using Newtonsoft.Json;
+using static ABCIPO.BusinessData.NSEIPO;
+
+namespace ABCIPO.Admin
+{
+    public partial class AddIPOMaster : System.Web.UI.Page
+    {
+        public string SqlCon, sql, msg, mnu, strRequest, clcode, openiporesp = "";
+        public bool CanApply = false;
+        public bool ISBranch = false;
+         //sssstring issuetype = ""; 
+        DataSet ds; public string sqlins;
+        protected void Page_Load(object sender, EventArgs e)
+        {
+
+
+            if (Session["adminuserid"] == null || Session["adminuserid"].ToString() == "")
+            {
+                Response.Redirect("/admin/Adminlogin.aspx");
+            }
+
+            SqlCon = ConfigurationManager.ConnectionStrings["IPOOnline"].ToString();
+
+            if (!IsPostBack)
+            {
+                //GetOpenIPO(); 
+            }
+        }
+
+        protected void btnGoNew_Click(object sender, EventArgs e)
+        {
+            string exchange = exchangeDropDown.SelectedValue;
+            if (exchange == "BSE")
+            {
+                fetchOpenISSUES();
+            }
+            else
+            {
+                fetchNSEipomaster();
+            }
+
+        }
+
+        protected void exchangeDropDown_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            string exchange = exchangeDropDown.SelectedValue;
+            if (exchange == "BSE")
+            {
+                issuetype.Style.Add("display","block");
+            }
+            else
+            {
+                issuetype.Style.Add("display", "none");
+            }
+        }
+
+        public void binddata()
+        {
+            string sqlins = "";
+            //if (msg == "CI")
+            //{
+            //current issue
+            // sql = "select convert(char(12),ipomaster.IPO_IssueFrm,106) as IPO_IssueFrm,convert(char(12),ipomaster.IPO_IssueTo,106) as IPO_IssueTo,ipomaster.IPO_Code,ipomaster.IPO_CoCode,ipomaster.IPO_prTO,ipomaster.IPO_prfrm,ipomaster.IPO_TypeMeth,ipomaster.IPO_RptName,IPOcompanymaster.Comp_name from ipomaster";
+            //  sql += " inner join IPOcompanymaster on IPOcompanymaster.Comp_code=ipomaster.IPO_coCode where ipomaster.IPO_IssueTo >= (select convert(varchar(10),getdate(),120)) and ipomaster.IPO_Issuefrm <= (select convert(varchar(10),getdate(),120))  order by ipomaster.IPO_Code";
+            DataTable dt = new DataTable();
+            dt = (DataTable)Session["ActiveIssueDs"];
+            //Response.Write(dt.Rows.Count);
+            //Response.End();
+            ds = new DataSet();
+            if (dt == null)
+            {
+                ds = null;
+                //ScriptManager.RegisterStartupScript(this, this.GetType(), "success", "alert('Data table no data.');", true);
+            }
+            else
+            {
+                DataView dv = dt.DefaultView;
+                DataTable dts = dv.ToTable();
+                DataTable ddisntict = new DataTable();
+                ddisntict = dv.ToTable(true, "Symbol", "Category", "OpenDate", "CloseDate", "FloorPrice", "CeilingPrice");
+                DataView dvd = ddisntict.DefaultView;
+                dvd.RowFilter = "Category = 'IND' and Symbol not in ('GENSOL','GOBLIN','TPIL')";
+                ds.Merge(dvd.ToTable());
+                //DataView dv = dt.DefaultView;
+                //dv.RowFilter = "Category = 'IND'";
+                //ds.Merge(dv.ToTable());
+            }
+            //}
+
+            //if (ds != null && ds.Tables[0].Rows.Count > 0)
+            //{
+
+            for (int i = 0; i < dt.Rows.Count; i++)
+            {
+                SqlParameter[] param = { new SqlParameter("@Symbol",  dt.Rows[i]["Symbol"].ToString()),
+                                          new SqlParameter("@OpenDate", FormatFunctions.C_Format.M_FormatDate(dt.Rows[i]["OpenDate"].ToString(), "MM/dd/yyyy")),
+                                          new SqlParameter("@CloseDate",  FormatFunctions.C_Format.M_FormatDate(dt.Rows[i]["CloseDate"].ToString(), "MM/dd/yyyy")),
+                                          new SqlParameter("@Category", dt.Rows[i]["Category"].ToString()),
+                                          new SqlParameter("@FloorPrice",  dt.Rows[i]["FloorPrice"].ToString()),
+                                          new SqlParameter("@CeilingPrice", dt.Rows[i]["CeilingPrice"].ToString()),
+                                           new SqlParameter("@MinBidQty",  dt.Rows[i]["MinBidQty"].ToString()),
+                                          new SqlParameter("@TickPrice",  dt.Rows[i]["TickPrice"].ToString()),
+                                             new SqlParameter("@IssueType",  dt.Rows[i]["IssueType"].ToString()) ,
+                                          new SqlParameter("@DiscountValue",  dt.Rows[i]["DiscountValue"].ToString())};
+                //string sqlcheck = "select * from ipomaster where IPO_symbse = '" + dt.Rows[i]["Symbol"].ToString() + "' and convert(varchar(25),IPO_issueFrm,101) = '" + FormatFunctions.C_Format.M_FormatDate(dt.Rows[i]["OpenDate"].ToString(), "MM/dd/yyyy") + "' and convert(varchar(25),IPO_issueto,101) = '" + FormatFunctions.C_Format.M_FormatDate(dt.Rows[i]["CloseDate"].ToString(), "MM/dd/yyyy") + "' and cast(ipo_cat as varchar(50)) ='" + dt.Rows[i]["Category"].ToString() + "'  and IPO_prfrm = '" + dt.Rows[i]["FloorPrice"].ToString() + "' and IPO_prTo = '" + dt.Rows[i]["CeilingPrice"].ToString() + "'";
+                string sqlcheck = "select * from ipomaster where IPO_symbse = @Symbol and convert(varchar(25),IPO_issueFrm,101) = @OpenDate and convert(varchar(25),IPO_issueto,101) = @CloseDate and cast(ipo_cat as varchar(50)) =@Category  and IPO_prfrm = @FloorPrice and IPO_prTo = @CeilingPrice";
+                try
+                {
+                    DataSet dschk = SqlHelper.ExecuteDataset(SqlCon, CommandType.Text, sqlcheck, param);
+                    if (dschk.Tables[0].Rows.Count > 0)
+                    {
+
+                    }
+                    else
+                    {
+
+                        sqlins += "  insert into IPOMaster(IPO_symbse,IPO_issueFrm,IPO_issueto,IPO_minOrd,IPO_mklot,IPO_prfrm,IPO_prTo,IPO_tick,IPO_mtimfrm,IPO_mtimto,ipo_typemeth,ipo_discount,ipo_cat)";
+                       sqlins += "values('" + dt.Rows[i]["Symbol"].ToString() + "','" + Convert.ToDateTime(dt.Rows[i]["OpenDate"].ToString()).ToShortDateString() + "','" + Convert.ToDateTime(dt.Rows[i]["CloseDate"].ToString()).ToShortDateString() + "','" + dt.Rows[i]["MinBidQty"].ToString() + "','" + dt.Rows[i]["MinBidQty"].ToString() + "','" + dt.Rows[i]["FloorPrice"].ToString() + "','" + dt.Rows[i]["CeilingPrice"].ToString() + "',";
+                       sqlins += "'" + dt.Rows[i]["TickPrice"].ToString() + "','" + Convert.ToDateTime(dt.Rows[i]["OpenDate"].ToString()).ToShortTimeString() + "','" + Convert.ToDateTime(dt.Rows[i]["CloseDate"].ToString()).ToShortTimeString() + "','" + dt.Rows[i]["IssueType"].ToString() + "','" + dt.Rows[i]["DiscountValue"].ToString() + "','" + dt.Rows[i]["category"].ToString() + "')";
+                        //sqlins += "values(@Symbol,@OpenDate,@CloseDate,@MinBidQty,@FloorPrice,@CeilingPrice,";
+                        //sqlins += "@TickPrice,@OpenDate,@CloseDate,@IssueType,@DiscountValue,@Category)";
+
+                    }
+                }
+                catch
+                {
+                    //Response.Write(sqlcheck);
+                    //Response.End();
+                }
+
+
+            }
+            try
+            {
+                
+                if (SqlHelper.ExecuteNonQuery(SqlCon, CommandType.Text, sqlins) > 0)
+                {
+                    ScriptManager.RegisterStartupScript(this, this.GetType(), "success", "alert('IPO details added in Master.');", true);
+                }
+            }
+            catch
+            {
+                //Response.Write(sqlins);
+                //Response.End();
+            }
+            //}
+            //else
+            //{
+            //    ScriptManager.RegisterStartupScript(this, this.GetType(), "success", "alert('Dataset is null.');", true);
+            //}
+
+            //if ((ISBranch) || (CanApply) || (msg == "PI") || (msg == "FI"))
+            //    NoData.Visible = ds.Tables[0].Rows.Count > 0 ? false : true;
+        }
+
+        public void insertOpenIPO(DataTable dt)
+        {
+            string sqlins = "";
+
+
+            //Response.Write(dt.Rows.Count);
+            //Response.End();
+            ds = new DataSet();
+            DataTable dts = new DataTable();
+            if (dt == null)
+            {
+                ds = null;
+                //ScriptManager.RegisterStartupScript(this, this.GetType(), "success", "alert('Data table no data.');", true);
+            }
+            else
+            {
+                DataView dv = dt.DefaultView;
+                //DataTable dts = dv.ToTable();
+                // DataTable ddisntict = new DataTable();
+                //ddisntict = dv.ToTable(true, "Symbol", "Category", "opendatetime", "closedatetime", "FloorPrice", "CeilingPrice");
+                //DataView dvd = ddisntict.DefaultView;
+                //dv.RowFilter = "Category = 'IND'";
+                //dts = dv.ToTable();
+                dv.RowFilter = "asbanonasba = '1'";
+                dts = dv.ToTable();
+            }
+
+
+            for (int i = 0; i < dts.Rows.Count; i++)
+            {
+                if (dts.Rows[i]["IssueType"].ToString() == "BB" || dts.Rows[i]["IssueType"].ToString() == "REIT" || dts.Rows[i]["IssueType"].ToString() == "FP")
+                {
+                    string opendate = DateTime.ParseExact(dts.Rows[i]["opendatetime"].ToString(), "dd-MM-yyyy HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None).ToString("dd MMM yyyy");
+                    string enddate = DateTime.ParseExact(dts.Rows[i]["closedatetime"].ToString(), "dd-MM-yyyy HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None).ToString("dd MMM yyyy");
+                    string opentime = DateTime.ParseExact(dts.Rows[i]["opendatetime"].ToString(), "dd-MM-yyyy HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None).ToString("HH:mm:ss");
+                    string endtime = DateTime.ParseExact(dts.Rows[i]["closedatetime"].ToString(), "dd-MM-yyyy HH:mm:ss", CultureInfo.InvariantCulture, DateTimeStyles.None).ToString("HH:mm:ss");
+
+                    SqlParameter[] param = { new SqlParameter("@Symbol",  dts.Rows[i]["Symbol"].ToString()),
+                                              new SqlParameter("@opendate", opendate),
+                                             new SqlParameter("@enddate",  enddate),
+                                              new SqlParameter("@Category", dts.Rows[i]["Category"].ToString()),
+                                              new SqlParameter("@FloorPrice",  dts.Rows[i]["FloorPrice"].ToString()),
+                                              new SqlParameter("@CeilingPrice", dts.Rows[i]["CeilingPrice"].ToString())};
+
+                    //string sqlcheck = "select * from ipomaster where IPO_symbse = '" + dts.Rows[i]["Symbol"].ToString() + "' and convert(varchar(25),IPO_issueFrm,106) = '" + opendate + "' and convert(varchar(25),IPO_issueto,106) = '" + enddate + "' and cast(ipo_cat as varchar(50)) ='" + dts.Rows[i]["Category"].ToString() + "'  and IPO_prfrm = '" + dts.Rows[i]["FloorPrice"].ToString() + "' and IPO_prTo = '" + dts.Rows[i]["CeilingPrice"].ToString() + "'";
+                    //string sqlcheck = "select * from ipomaster where IPO_symbse = @Symbol and convert(varchar(25),IPO_issueFrm,106) = @opendate and convert(varchar(25),IPO_issueto,106) =@enddate and cast(ipo_cat as varchar(50)) =@Category  and IPO_prfrm = @FloorPrice and IPO_prTo = @CeilingPrice";
+                    string sqlcheck = "select * from ipomaster where IPO_symbse = @Symbol and  cast(ipo_cat as varchar(50)) =@Category ";
+                    try
+                    {
+                        DataSet dschk = SqlHelper.ExecuteDataset(SqlCon, CommandType.Text, sqlcheck, param);
+                        if (dschk.Tables[0].Rows.Count > 0)
+                        {
+                            sqlins += " update  IPOMaster set  IPO_symbse='" + dts.Rows[i]["Symbol"].ToString() + "',ipo_name='" + dts.Rows[i]["name"].ToString() + "',IPO_issueFrm='" + opendate + "',IPO_issueto='" + enddate + "',IPO_minOrd='" + dts.Rows[i]["minbidqty"].ToString() + "',";
+                            sqlins += "IPO_mklot ='" + dts.Rows[i]["minbidqty"].ToString() + "',IPO_prfrm='" + dts.Rows[i]["floorprice"].ToString() + "',IPO_prTo='" + dts.Rows[i]["ceilingprice"].ToString() + "',";
+                            sqlins += "IPO_tick='" + dts.Rows[i]["tickprice"].ToString() + "',IPO_mtimfrm='" + opentime + "',IPO_mtimto='" + endtime + "',ipo_typemeth='" + dts.Rows[i]["issuetype"].ToString() + "',";
+                            sqlins += "ipo_discount='" + dts.Rows[i]["discountvalue"].ToString() + "',ipo_cat='" + dts.Rows[i]["category"].ToString() + "',ipo_discount_type='" + dts.Rows[i]["discounttype"].ToString() + "'";
+                            sqlins += "  where IPO_symbse='" + dts.Rows[i]["Symbol"].ToString() + "' and ipo_cat='" + dts.Rows[i]["category"].ToString() + "'";
+                        }
+                        else
+                        {
+                            #region commented
+                            //string sqlcon = "select * from ipomaster where IPO_symbse='" + dt.Rows[i]["Symbol"].ToString() + "' and IPO_issueFrm is null and IPO_issueto is null ";
+                            //string sqlcon = "select * from ipomaster where IPO_symbse=@Symbol and IPO_issueFrm is null and IPO_issueto is null ";
+                            //DataSet ds = SqlHelper.ExecuteDataset(SqlCon, CommandType.Text, sqlcon,param);
+                            //if (ds.Tables[0].Rows.Count > 0)
+                            //{
+                            //    sqlins = "update ipomaster set IPO_symbse = '" + dts.Rows[i]["Symbol"].ToString() + "' and ipo_name ='" + dts.Rows[i]["name"].ToString() + "' and convert(varchar(25),IPO_issueFrm,101) = '" + FormatFunctions.C_Format.M_FormatDate(dts.Rows[i]["OpenDate"].ToString(), "MM/dd/yyyy") + "' and convert(varchar(25),IPO_issueto,101) = '" + FormatFunctions.C_Format.M_FormatDate(dts.Rows[i]["CloseDate"].ToString(), "MM/dd/yyyy") + "' and cast(ipo_cat as varchar(50)) ='" + dts.Rows[i]["Category"].ToString() + "'  and IPO_prfrm = '" + dts.Rows[i]["FloorPrice"].ToString() + "' and IPO_prTo = '" + dts.Rows[i]["CeilingPrice"].ToString() + "' ";
+                            //}
+
+                            //else
+                            //{
+                            //    sqlins += " insert into IPOMaster(IPO_symbse,ipo_name,IPO_issueFrm,IPO_issueto,IPO_minOrd,IPO_mklot,IPO_prfrm,IPO_prTo,IPO_tick,IPO_mtimfrm,IPO_mtimto,ipo_typemeth,ipo_discount,ipo_cat,ipo_discount_type)";
+                            //    sqlins += "values('" + dts.Rows[i]["Symbol"].ToString() + "','" + dts.Rows[i]["name"].ToString() + "','" + opendate + "','" + enddate + "','" + dts.Rows[i]["minbidqty"].ToString() + "','" + dts.Rows[i]["minbidqty"].ToString() + "','" + dts.Rows[i]["floorprice"].ToString() + "','" + dts.Rows[i]["ceilingprice"].ToString() + "',";
+                            //    sqlins += "'" + dts.Rows[i]["tickprice"].ToString() + "','" + opentime + "','" + endtime + "','" + dts.Rows[i]["issuetype"].ToString() + "','" + dts.Rows[i]["discountvalue"].ToString() + "','" + dts.Rows[i]["category"].ToString() + "','" + dts.Rows[i]["discounttype"].ToString() + "')";
+                            //}
+                            #endregion
+                            sqlins += " insert into IPOMaster(IPO_symbse,ipo_name,IPO_issueFrm,IPO_issueto,IPO_minOrd,IPO_mklot,IPO_prfrm,IPO_prTo,IPO_tick,IPO_mtimfrm,IPO_mtimto,ipo_typemeth,ipo_discount,ipo_cat,ipo_discount_type)";
+                            sqlins += "values('" + dts.Rows[i]["Symbol"].ToString() + "','" + dts.Rows[i]["name"].ToString() + "','" + opendate + "','" + enddate + "','" + dts.Rows[i]["minbidqty"].ToString() + "','" + dts.Rows[i]["minbidqty"].ToString() + "','" + dts.Rows[i]["floorprice"].ToString() + "','" + dts.Rows[i]["ceilingprice"].ToString() + "',";
+                            sqlins += "'" + dts.Rows[i]["tickprice"].ToString() + "','" + opentime + "','" + endtime + "','" + dts.Rows[i]["issuetype"].ToString() + "','" + dts.Rows[i]["discountvalue"].ToString() + "','" + dts.Rows[i]["category"].ToString() + "','" + dts.Rows[i]["discounttype"].ToString() + "')";
+                        }
+                    }
+                    catch
+                    {
+                        //Response.Write(sqlcheck);
+                        //Response.End();
+                        //ScriptManager.RegisterStartupScript(this, this.GetType(), "success", "alert('IPO import Exception occured. Try again After sometime.');", true);
+
+                    }
+                }
+
+            }
+            try
+            {
+                if (sqlins != "" && sqlins != null)
+                {
+                    if (SqlHelper.ExecuteNonQuery(SqlCon, CommandType.Text, sqlins) > 0)
+                    {
+                        BusinessData.NSE_ExceptionLogging.NSE_SendErrorToText("BSE IPOORDER('IPO details added in Master.') :" + sqlins);
+                        ScriptManager.RegisterStartupScript(this, this.GetType(), "success", "alert('IPO details added in Master.');", true);
+                    }
+                }
+                else
+                {
+                    BusinessData.NSE_ExceptionLogging.NSE_SendErrorToText("BSE IPOORDER ('IPO import Completed. open issues are already imported / There is no open issues .') :" + sqlins);
+                    ScriptManager.RegisterStartupScript(this, this.GetType(), "success", "alert('IPO import Completed. open issues are already imported / There is no open issues .');", true);
+
+                }
+            }
+            catch
+            {
+                //Response.Write(sqlins);
+                //Response.End();
+                ScriptManager.RegisterStartupScript(this, this.GetType(), "success", "alert('IPO import Exception occured. Try again After sometime.');", true);
+
+            }
+
+        }
+
+        public void fetchNSEipomaster()
+        {
+            int count = 0; int failurecount = 0;
+            string Status = "";
+            #region start
+            NSEIPO nseipo = new NSEIPO();
+            string token = nseipo.GenerateToken();
+            if (token.Contains("error") || token.Contains("login failed"))
+            {
+                ScriptManager.RegisterStartupScript(this.Page, this.Page.GetType(), "Msge", "alert('Login Failed')", true);
+            }
+            else
+            {
+                HttpWebRequest lhttpRequest = null;
+                //string lServiceUrl = ConfigurationManager.AppSettings["NSE_IPOURL"].ToString() + "/eipo/v1/ipomaster";
+                string lServiceUrl = ConfigurationManager.AppSettings["NSE_IPOURL_LIVE"].ToString() + "/eipo/v1/ipomaster";
+
+
+                BusinessData.NSE_ExceptionLogging.NSE_SendErrorToText("ipomaster Url:" + lServiceUrl);//log
+                string loutpout_Response = "";
+                try
+                {
+                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls | SecurityProtocolType.Ssl3 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls12;
+                    lhttpRequest = (HttpWebRequest)WebRequest.Create(new Uri(lServiceUrl));
+                    lhttpRequest.Accept = "application/json";
+                    lhttpRequest.ContentType = "application/json";
+                    lhttpRequest.KeepAlive = false;
+                    lhttpRequest.Method = "GET";
+                    lhttpRequest.Headers.Add("Access-Token", token);
+
+                    using (HttpWebResponse httpResponse = (HttpWebResponse)lhttpRequest.GetResponse())
+                    {
+                        using (Stream strm = httpResponse.GetResponseStream())
+                        {
+                            loutpout_Response = (new StreamReader(strm)).ReadToEnd();
+
+                            #region Processing Data
+                            ipomasterstaus jsonobj = JsonConvert.DeserializeObject<ipomasterstaus>(loutpout_Response);
+                            // string reason = "";
+                            BusinessData.NSE_ExceptionLogging.NSE_SendErrorToText("ipomaster Response:" + loutpout_Response);//log
+                            string status = jsonobj.status.ToString();
+                            if (status == "success")
+                            {
+                                int len = jsonobj.data.Count;
+                                #region LOOP category
+                                if (jsonobj.data.Count > 1)
+                                {
+                                    for (int i = 0; i < jsonobj.data.Count; i++)
+                                    {
+                                        #region Processing Symbols
+                                        string biddingStartDate, symbol, name, minBidQuantity, registrar, lotSize, faceValue, minPrice,
+                                        maxPrice, tickSize, cutoffPrice, biddingEndDate, dailyStartTime, dailyEndTime, Isin, issueSize, subType, t1ModStartDate,
+                                        t1ModEndDate, t1ModStartTime, t1ModEndTime, issueType;
+
+                                        issueType = jsonobj.data[i].issueType.ToString();
+                                        subType = jsonobj.data[i].subType.ToString();
+                                        if (issueType == "EQUITY" && subType == "SME")
+                                        //if (issueType == "EQUITY")
+                                        {
+                                            name = jsonobj.data[i].name.ToString();
+                                            symbol = jsonobj.data[i].symbol.ToString();
+                                            minBidQuantity = jsonobj.data[i].minBidQuantity.ToString();
+                                            registrar = jsonobj.data[i].registrar.ToString();
+                                            lotSize = jsonobj.data[i].lotSize.ToString();
+                                            faceValue = jsonobj.data[i].faceValue.ToString();
+                                            minPrice = jsonobj.data[i].minPrice.ToString();
+                                            maxPrice = jsonobj.data[i].maxPrice.ToString();
+                                            tickSize = jsonobj.data[i].tickSize.ToString();
+                                            cutoffPrice = jsonobj.data[i].cutoffPrice.ToString();
+                                            dailyStartTime = jsonobj.data[i].dailyStartTime.ToString();
+                                            dailyEndTime = jsonobj.data[i].dailyEndTime.ToString();
+                                            Isin = jsonobj.data[i].Isin.ToString();
+                                            issueSize = jsonobj.data[i].issueSize.ToString();
+                                            //subType = jsonobj.data[i].subType.ToString();
+                                            t1ModStartDate = jsonobj.data[i].t1ModStartDate.ToString();
+                                            if (t1ModStartDate != null && t1ModStartDate != "")
+                                            {
+                                                DateTime t1ModStdate = DateTime.ParseExact(jsonobj.data[i].t1ModStartDate, "dd-MM-yyyy", CultureInfo.InvariantCulture);
+                                                t1ModStartDate = t1ModStdate.ToString("yyyy-MM-dd");
+                                            }
+                                            t1ModEndDate = jsonobj.data[i].t1ModEndDate.ToString();
+                                            if (t1ModEndDate != null && t1ModEndDate != "")
+                                            {
+                                                DateTime t1ModENDdate = DateTime.ParseExact(jsonobj.data[i].t1ModEndDate, "dd-MM-yyyy", CultureInfo.InvariantCulture);
+                                                t1ModEndDate = t1ModENDdate.ToString("yyyy-MM-dd");
+                                            }
+                                            t1ModStartTime = jsonobj.data[i].t1ModStartTime.ToString();
+                                            t1ModEndTime = jsonobj.data[i].t1ModEndTime.ToString();
+
+                                            //biddingEndDate = Convert.ToDateTime(jsonobj.data[i].biddingEndDate).ToString("yyyy-MM-dd");
+                                            DateTime dateTime = DateTime.ParseExact(jsonobj.data[i].biddingEndDate, "dd-MM-yyyy", CultureInfo.InvariantCulture);
+                                            biddingEndDate = dateTime.ToString("yyyy-MM-dd");
+
+                                            // biddingEndDate = Convert.ToDateTime(jsonobj.data[i].biddingEndDate).ToString();
+
+                                            //biddingStartDate = Convert.ToDateTime(jsonobj.data[i].biddingStartDate).ToString("yyyy-MM-dd");
+                                            DateTime dateTime1 = DateTime.ParseExact(jsonobj.data[i].biddingStartDate, "dd-MM-yyyy", CultureInfo.InvariantCulture);
+                                            biddingStartDate = dateTime1.ToString("yyyy-MM-dd");
+                                            // biddingStartDate = Convert.ToDateTime(jsonobj.data[i].biddingStartDate).ToString();
+
+                                            if (jsonobj.data[i].subCategorySettings != null && jsonobj.data[i].subCategorySettings.Count > 1)
+                                            {
+
+                                                sql = "select * from NSE_IPOCategoryMaster";
+                                                DataSet ds1 = SqlHelper.ExecuteDataset(SqlCon, CommandType.Text, sql);
+                                                for (int j = 0; j < jsonobj.data[i].subCategorySettings.Count; j++)
+                                                {
+                                                    string caCode = jsonobj.data[i].subCategorySettings[j].caCode.ToString();
+                                                    string subCatCode = jsonobj.data[i].subCategorySettings[j].subCatCode.ToString();
+                                                    if (caCode == "RETAIL")
+                                                    {
+                                                        if (ds1.Tables[0].Rows.Count > 0)
+                                                        {
+                                                            DataView dv = new DataView(ds1.Tables[0]);
+
+                                                            //dv.RowFilter = "CStatus ="+subCatCode;
+                                                            dv.RowFilter = "CStatus='" + subCatCode + "'";
+                                                            DataTable dt = new DataTable();
+                                                            dt = dv.ToTable();
+                                                            if (dt.Rows.Count > 0) { 
+                                                            //string subCatCode = jsonobj.data[i].subCategorySettings[j].subCatCode.ToString();
+
+                                                                // if (subCatCode == "IND" || subCatCode == "EMP" || subCatCode == "SHA" || subCatCode == "POL") { 
+                                                                string minValue = jsonobj.data[i].subCategorySettings[j].minValue != null ? jsonobj.data[i].subCategorySettings[j].minValue.ToString() : "";
+                                                            string maxValue = jsonobj.data[i].subCategorySettings[j].maxValue != null ? jsonobj.data[i].subCategorySettings[j].maxValue.ToString() : "";
+                                                            string allowCutOff = jsonobj.data[i].subCategorySettings[j].allowCutOff.ToString();
+                                                            string discountType = jsonobj.data[i].subCategorySettings[j].discountType.ToString();
+                                                            string discountPrice = jsonobj.data[i].subCategorySettings[j].discountPrice != null ? jsonobj.data[i].subCategorySettings[j].discountPrice.ToString() : "";
+                                                            string maxPrice1 = jsonobj.data[i].subCategorySettings[j].maxPrice != null ? jsonobj.data[i].subCategorySettings[j].maxPrice.ToString() : "";
+                                                            string allowUpi = jsonobj.data[i].subCategorySettings[j].allowUpi.ToString();
+                                                            string maxUpiLimit = jsonobj.data[i].subCategorySettings[j].maxUpiLimit != null ? jsonobj.data[i].subCategorySettings[j].maxUpiLimit.ToString() : "";
+                                                                //string caCode = jsonobj.data[i].subCategorySettings[j].caCode.ToString();
+                                                            
+                                                            insertipomaster(biddingStartDate, symbol, name, minBidQuantity, registrar, lotSize, faceValue, minPrice,
+                                                    maxPrice, tickSize, cutoffPrice, biddingEndDate, dailyStartTime, dailyEndTime, Isin, issueSize, subType, t1ModStartDate,
+                                                    t1ModEndDate, t1ModStartTime, t1ModEndTime, issueType, subCatCode, minValue, maxValue, allowCutOff, discountType, discountPrice,
+                                                    maxPrice1, allowUpi, maxUpiLimit, caCode);
+                                                            count = count + 1;
+                                                            }
+                                                            else
+                                                            {
+
+                                                            }
+                                                        }
+                                                    }
+                                                    // }
+                                                }
+                                            }
+                                            #region categoryDetails and seriesDetails
+                                            //if (jsonobj.data[i].categoryDetails!=null && jsonobj.data[i].categoryDetails.Count > 1)
+                                            //{
+                                            //    for (int j = 0; j < jsonobj.data[i].categoryDetails.Count; j++)
+                                            //    {
+                                            //        string startTime, endTime, code;
+                                            //        startTime = jsonobj.data[i].categoryDetails[j].startTime.ToString();
+                                            //        endTime = jsonobj.data[i].categoryDetails[j].endTime.ToString();
+                                            //        code = jsonobj.data[i].categoryDetails[j].code!=null?jsonobj.data[i].categoryDetails[j].code.ToString():"";
+                                            //    }
+                                            //}
+                                            //if (jsonobj.data[i].seriesDetails!=null && jsonobj.data[i].seriesDetails.Count > 1)
+                                            //{
+                                            //    for (int K = 0; K < jsonobj.data[i].seriesDetails.Count; K++)
+                                            //    {
+
+                                            //        string code, desc;
+
+                                            //        code = jsonobj.data[i].seriesDetails[K].code.ToString();
+                                            //        desc = jsonobj.data[i].seriesDetails[K].desc.ToString();
+
+                                            //    }
+                                            //}
+                                            #endregion
+                                        }
+                                        #endregion
+                                    }
+                                }
+                                #endregion
+                                string str = "Request:- " + lhttpRequest + " \n Response:-" + loutpout_Response.ToString();
+                                BusinessData.NSE_ExceptionLogging.NSE_SendErrorToText(str);
+                                ScriptManager.RegisterStartupScript(this.Page, this.Page.GetType(), "Msge", "alert('IPO details added in Master' )", true);
+                            }
+                            else
+                            {
+                                BusinessData.NSE_ExceptionLogging.NSE_SendErrorToText("IPOMaster status" + status);
+                                failurecount = failurecount + 1;
+                                ScriptManager.RegisterStartupScript(this.Page, this.Page.GetType(), "Msge", "alert('try agin later' )", true);
+                            }
+                            #endregion
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Status = "error-" + ex.Message.ToString();
+                    string str = "Request:- " + lhttpRequest + " \n Response:-" + loutpout_Response.ToString();
+                    //BusinessData.NSE_ExceptionLogging.NSE_SendErrorToText(loutpout_Response, Status);
+                    BusinessData.NSE_ExceptionLogging.NSE_SendErrorToText("IPOMaster Error:"+ex.Message.ToString());
+                    ScriptManager.RegisterStartupScript(this.Page, this.Page.GetType(), "Msge", "alert('" + ex.Message.ToString().Replace("'", "") + "')", true);
+                }
+                finally
+                {
+                    Status = "Inserted Rows in a table:"+ count+ " \n Failed to Inserted Rows in a table: "+ failurecount;
+                    BusinessData.NSE_ExceptionLogging.NSE_SendErrorToText(Status);
+                }
+            }
+            #endregion
+        }
+
+        public void insertipomaster(string biddingStartDate, string symbol, string name, string minBidQuantity, string registrar, string lotSize, string faceValue, string minPrice,
+                string maxPrice, string tickSize, string cutoffPrice, string biddingEndDate, string dailyStartTime, string dailyEndTime, string Isin, string issueSize, string subType, string t1ModStartDate,
+                string t1ModEndDate, string t1ModStartTime, string t1ModEndTime, string issueType, string subCatCode, string minValue, string maxValue, string allowCutOff, string discountType, string discountPrice,
+                string maxPrice1, string allowUpi, string maxUpiLimit, string caCode)
+
+        {
+            #region
+            int update = 0;
+            int insert=0;
+            int failure = 0;
+            string Status = "";
+            try
+            {
+                SqlParameter[] param = { new SqlParameter("@symbol",  symbol),
+                              new SqlParameter("@subCatCode",subCatCode),
+                              new SqlParameter("@biddingStartDate",  biddingStartDate),
+                              new SqlParameter("@biddingEndDate",biddingEndDate) ,
+                              new SqlParameter("@minBidQuantity",  minBidQuantity),
+                              new SqlParameter("@registrar",registrar) ,
+                              new SqlParameter("@lotSize",  lotSize),
+                              new SqlParameter("@t1ModStartDate",t1ModStartDate),
+                 new SqlParameter("@t1ModEndDate",t1ModEndDate),
+                              new SqlParameter("@dailyStartTime",  dailyStartTime),
+                              new SqlParameter("@dailyEndTime",dailyEndTime) ,
+                              new SqlParameter("@t1ModStartTime",  t1ModStartTime),
+                              new SqlParameter("@t1ModEndTime",t1ModEndTime) ,
+                              //new SqlParameter("@subCatCode",  subCatCode),
+                              new SqlParameter("@minValue",minValue),
+                 new SqlParameter("@maxValue",maxValue),
+                              new SqlParameter("@maxPrice",  maxPrice),
+                              new SqlParameter("@minPrice",minPrice) ,
+                              new SqlParameter("@maxUpiLimit",  maxUpiLimit),
+                              new SqlParameter("@discountPrice",discountPrice) ,
+                              new SqlParameter("@discountType",  discountType),
+                              new SqlParameter("@allowCutOff",allowCutOff),
+                 new SqlParameter("@allowUpi",  allowUpi),
+                              new SqlParameter("@maxPrice1",maxPrice1) ,
+                              new SqlParameter("@caCode",  caCode),
+                              new SqlParameter("@tickSize",tickSize) ,
+                              new SqlParameter("@issueType",  issueType),
+                              new SqlParameter("@faceValue",faceValue),
+                 new SqlParameter("@name",  name),
+                              new SqlParameter("@issueSize",issueSize) ,
+                              new SqlParameter("@subType",  subType),
+                              new SqlParameter("@cutoffPrice",cutoffPrice),
+                 new SqlParameter("@Isin",Isin)};
+                //string sqlqry = "select * from NSE_ipomaster where ipo_symbse='" + symbol + "' and IPO_cat='" + subCatCode + "' ";
+                string sqlqry = "select * from NSE_ipomaster where ipo_symbse=@symbol and IPO_cat=@subCatCode ";
+
+                DataSet ds1 = SqlHelper.ExecuteDataset(SqlCon, CommandType.Text, sqlqry, param);
+                if (ds1.Tables[0].Rows.Count > 0)
+                {
+                    //update query
+                    Status = ": Row already exists  Symbol:'" + symbol + "' and Category:'" + subCatCode + "'in  a table ";
+
+                    //sqlins = "update NSE_ipomaster set ipo_symbse='" + symbol + "',ipo_issuefrm='" + biddingStartDate + "',ipo_issueto='" + biddingEndDate + "',IPO_MinOrd='" + minBidQuantity + "',Registrar='" + registrar + "',IPO_MkLot='" + lotSize + "',T1Mode_Startdate='" + t1ModStartDate + "',T1Mode_Enddate='" + t1ModEndDate + "',";
+                    //sqlins += "IPO_MTimFrm='" + dailyStartTime + "',IPO_MTimTo='" + dailyEndTime + "',T1Mode_StartTime='" + t1ModStartTime + "',T1Mode_EndTime='" + t1ModEndTime + "',IPO_cat='" + subCatCode + "',subcat_minvalue='" + minValue + "',subcat_maxvalue='" + maxValue + "',IPO_PrTo='" + maxPrice + "',IPO_PrFrm='" + minPrice + "'";
+                    //sqlins += "subcat_maxupilimit='" + maxUpiLimit + "',IPO_Discount='" + discountPrice + "',ipo_discount_type='" + discountType + "',subcat_allowcutoff='" + allowCutOff + "',subcat_allowUPI='" + allowUpi + "',cat_maxprice='" + maxPrice1 + "',sub_cacode='" + caCode + "',IPO_Tick='" + tickSize + "',IPO_TypeMeth='" + issueType + "',IPO_FaceVal='" + faceValue + "',ipo_name='" + name + "',IPO_IssSize='" + issueSize + "',Sub_type='" + subType + "',ipo_cutoffprice='" + cutoffPrice + "',isin='" + Isin + "'";
+                    sqlins = "update NSE_ipomaster set ipo_symbse=@symbol,ipo_issuefrm=@biddingStartDate,ipo_issueto=@biddingEndDate,IPO_MinOrd=@minBidQuantity,Registrar=@registrar,IPO_MkLot=@lotSize,T1Mode_Startdate=@t1ModStartDate,T1Mode_Enddate=@t1ModEndDate,";
+                    sqlins += "IPO_MTimFrm=@dailyStartTime,IPO_MTimTo=@dailyEndTime,T1Mode_StartTime=@t1ModStartTime,T1Mode_EndTime=@t1ModEndTime,IPO_cat=@subCatCode,subcat_minvalue=@minValue,subcat_maxvalue=@maxValue,IPO_PrTo=@maxPrice,IPO_PrFrm=@minPrice,";
+                    sqlins += "subcat_maxupilimit=@maxUpiLimit,IPO_Discount=@discountPrice,ipo_discount_type=@discountType,subcat_allowcutoff=@allowCutOff,subcat_allowUPI=@allowUpi,cat_maxprice=@maxPrice1,sub_cacode=@caCode,IPO_Tick=@tickSize,IPO_TypeMeth=@issueType,IPO_FaceVal=@faceValue,ipo_name=@name,IPO_IssSize=@issueSize,Sub_type=@subType,ipo_cutoffprice=@cutoffPrice,isin=@Isin where ipo_symbse=@symbol and IPO_cat=@subCatCode ";
+                    SqlHelper.ExecuteNonQuery(ConfigurationManager.ConnectionStrings["IPOOnline"].ToString(), CommandType.Text, sqlins, param);
+                    Status += ":updated Data Sucessfully";
+                    update = update + 1;
+                }
+                else
+                {
+                    sqlins = " insert into NSE_ipomaster(ipo_symbse,ipo_issuefrm,ipo_issueto,IPO_MinOrd,Registrar,IPO_MkLot,T1Mode_Startdate,T1Mode_Enddate,IPO_MTimFrm,IPO_MTimTo,T1Mode_StartTime,T1Mode_EndTime,IPO_cat,subcat_minvalue,subcat_maxvalue,subcat_maxupilimit,IPO_Discount,ipo_discount_type,subcat_allowcutoff,subcat_allowUPI,cat_maxprice,sub_cacode,IPO_Tick,IPO_TypeMeth,IPO_FaceVal,IPO_PrFrm,ipo_name,IPO_IssSize,Sub_type,IPO_PrTo,ipo_cutoffprice,isin)";
+                    //sqlins += "values('" + symbol + "','" + biddingStartDate + "','" + biddingEndDate + "','" + minBidQuantity + "','" + registrar + "','" + lotSize + "','" + t1ModStartDate + "','" + t1ModEndDate + "',";
+                    //sqlins += "'" + dailyStartTime + "','" + dailyEndTime + "','" + t1ModStartTime + "','" + t1ModEndTime + "','" + subCatCode + "','" + minValue + "',";
+                    //sqlins += "'" + maxValue + "','" + maxUpiLimit + "','" + discountPrice + "','" + discountType + "','" + allowCutOff + "','" + allowUpi + "','" + maxPrice1 + "','" + caCode + "','" + tickSize + "','" + issueType + "','" + faceValue + "','" + minPrice + "','" + name + "','" + issueSize + "','" + subType + "','" + maxPrice + "','" + cutoffPrice + "', '" + Isin + "')";
+                    sqlins += "values(@symbol,@biddingStartDate,@biddingEndDate,@minBidQuantity,@registrar,@lotSize,@t1ModStartDate,@t1ModEndDate,";
+                    sqlins += "@dailyStartTime,@dailyEndTime,@t1ModStartTime,@t1ModEndTime,@subCatCode,@minValue,";
+                    sqlins += "@maxValue,@maxUpiLimit,@discountPrice,@discountType,@allowCutOff,@allowUpi,@maxPrice1,@caCode,@tickSize,@issueType,@faceValue,@minPrice,@name,@issueSize,@subType,@maxPrice,@cutoffPrice, @Isin)";
+                    SqlHelper.ExecuteNonQuery(ConfigurationManager.ConnectionStrings["IPOOnline"].ToString(), CommandType.Text, sqlins, param);
+                    Status = " :inserted Data Sucessfully";
+                    insert = insert + 1;
+                }
+            }
+            catch (Exception ex)
+            {
+                 failure = failure + 1;
+                 Status = "error-" + ex.ToString();
+                 Status += "Symbol:'" + symbol + "' and Category:'" + subCatCode + "'";
+                BusinessData.NSE_ExceptionLogging.NSE_SendErrorToText("IPO Master insert/update a table Error:"+ Status);
+            }
+            finally
+            {
+                Status = ": Inserted Rows in a table(NSE):" + insert + " / Failed to Inserted Rows in a table:" + failure + "/ updated Rows in a table:"+ update;
+               // Status = "Inserted Rows  Symbol:'" + symbol + "' and Category:'" + subCatCode + "' in a table";
+                BusinessData.NSE_ExceptionLogging.NSE_SendErrorToText("IPO Master insert/updated in  a table(NSE):" + sqlins+"Status:"+ Status);
+            }
+            #endregion
+        }
+        public void fetchOpenISSUES()
+        {
+            BusinessData.ExceptionLogging.SendErrorToText("Start Request", "", "");
+            loginrequest req = new loginrequest();
+            BSEIPO bseipo = new BSEIPO();
+            //req.membercode = "6635";
+            //req.loginid = "PROSTOCKSUAT";
+            //req.password = "Pro@1234"; //Ram@2016 //123456 //Pro@1234
+            //req.ibbsid = "3H815YDMU9";//3H815YDMU9   //36CQZDROHE //V5ON4MSE2K
+
+            req.membercode = ConfigurationManager.AppSettings["membercode"].ToString();
+            req.loginid = ConfigurationManager.AppSettings["loginid"].ToString();
+            //req.password = ConfigurationManager.AppSettings["password"].ToString(); //Ram@2016 //123456 //Pro@1234
+            req.password = bseipo.oldpassword();
+
+            req.ibbsid = ConfigurationManager.AppSettings["IBBSID"].ToString();//3H815YDMU9   //36CQZDROHE
+
+            string reqjson = "";
+            reqjson = (new JavaScriptSerializer()).Serialize(req);
+            string checksum = bseipo.EncryptText(reqjson, ConfigurationManager.AppSettings["IBBSKEY"].ToString());
+            //postData2BSE(reqjson, checksum);
+
+            postData2BSEOPEN("", bseipo.validtoken());
+
+        }
+        //public void postData2BSE(string pRequestJson, string pChecksum)
+        //{
+        //    HttpWebRequest lhttpRequest = null;
+
+        //    //string lServiceUrl = "https://uat.bseindia.in/ibbsapi/iBBSAPIService.svc/v1/login";
+        //    string lServiceUrl = ConfigurationManager.AppSettings["IPOURL"].ToString() + "ibbsmsgapi/iBBSWebBroadcastApi.svc/v1/login";
+        //    string loutpout_Response = "";
+        //    try
+        //    {
+        //        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls | SecurityProtocolType.Ssl3 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls12;
+        //        //ServicePointManager.SecurityProtocol = (SecurityProtocolType)768 | (SecurityProtocolType)3072;
+        //        //System.Net.ServicePointManager.ServerCertificateValidationCallback = Function(Object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors);
+
+        //        ServicePointManager.ServerCertificateValidationCallback = delegate (object sender, System.Security.Cryptography.X509Certificates.X509Certificate pCertificate, System.Security.Cryptography.X509Certificates.X509Chain pChain, System.Net.Security.SslPolicyErrors pSSLPolicyErrors) { return true; };
+
+        //        //lhttpRequest = DirectCast(WebRequest.Create(new Uri(lServiceUrl)), HttpWebRequest);
+        //        lhttpRequest = (HttpWebRequest)WebRequest.Create(new Uri(lServiceUrl));
+        //        lhttpRequest.Accept = "application/json";
+        //        lhttpRequest.ContentType = "application/json";
+        //        lhttpRequest.KeepAlive = false;
+        //        lhttpRequest.Method = "POST";
+        //        lhttpRequest.Headers.Add("Checksum", pChecksum);
+        //        //IWebProxy proxy = lhttpRequest.Proxy;
+        //        //if (proxy != null)
+        //        //{
+        //        //    string proxyuri = "http://proxy.bseltd.domain:8080/";
+        //        //    lhttpRequest.UseDefaultCredentials = true;
+        //        //    lhttpRequest.Proxy = new WebProxy(proxyuri, false);
+        //        //    lhttpRequest.Proxy.Credentials = System.Net.CredentialCache.DefaultCredentials;
+        //        //}
+
+        //        byte[] bytes1 = Encoding.UTF8.GetBytes(pRequestJson);
+        //        using (Stream stream = lhttpRequest.GetRequestStream())
+        //        {
+        //            stream.Write(bytes1, 0, bytes1.Length);
+        //            stream.Close();
+        //        }
+
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        BusinessData.ExceptionLogging.SendErrorToText("", "", ex.Message.ToString());
+        //        //using (HttpWebResponse httpResponse= DirectCast(lhttpRequest.GetResponse(), HttpWebResponse))
+        //        //lblresult.Text = ex.Message.ToString();
+        //    }
+        //    JavaScriptSerializer serializer = new JavaScriptSerializer();
+        //    try
+        //    {
+        //        using (HttpWebResponse httpResponse = (HttpWebResponse)lhttpRequest.GetResponse())
+        //        {
+        //            using (Stream strm = httpResponse.GetResponseStream())
+        //            {
+        //                loutpout_Response = (new StreamReader(strm)).ReadToEnd();
+        //                string str = "Request:- " + pRequestJson + " \n Response:-" + loutpout_Response.ToString();
+        //                var jsonobj = new JavaScriptSerializer().Deserialize<Dictionary<string, string>>(loutpout_Response);
+        //                BusinessData.ExceptionLogging.SendErrorToText(pRequestJson, loutpout_Response, lServiceUrl);
+        //                string errorcode = jsonobj["errorcode"];
+        //                string token = jsonobj["token"];
+        //                Session["IPOtoken"] = token;
+        //                string errormsg = jsonobj["message"];
+        //                if (errorcode == "0")
+        //                {
+        //                    //lblresult.Text = str + "|| Token :" + token;
+
+        //                }
+        //                else
+        //                {
+        //                    //postData2BSEOPEN("", token);
+
+        //                    ScriptManager.RegisterStartupScript(this, this.GetType(), "IPOerror", "alert('" + errormsg + "');", true);
+        //                    //lblresult.Text = str + "|| Error msg :" + errormsg;
+        //                }
+
+        //            }
+        //        }
+        //    }
+        //    catch (Exception ex)
+        //    {
+
+        //        BusinessData.ExceptionLogging.SendErrorToText(pRequestJson, loutpout_Response, ex.Message.ToString());
+        //        //lblresult.Text = ex.Message.ToString();
+        //    }
+        //}
+
+        public void postData2BSEOPEN(string pRequestJson, string token)
+        {
+            HttpWebRequest lhttpRequest = null;
+            string lServiceUrl = ConfigurationManager.AppSettings["IPOURL"].ToString() + "ibbsmsgapi/iBBSWebBroadcastApi.svc/v1/openissue";
+            string loutpout_Response = "";
+            try
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls | SecurityProtocolType.Ssl3 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls12;
+                //ServicePointManager.SecurityProtocol = (SecurityProtocolType)768 | (SecurityProtocolType)3072;
+                //System.Net.ServicePointManager.ServerCertificateValidationCallback = Function(Object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors);
+
+                ServicePointManager.ServerCertificateValidationCallback = delegate (object sender, System.Security.Cryptography.X509Certificates.X509Certificate pCertificate, System.Security.Cryptography.X509Certificates.X509Chain pChain, System.Net.Security.SslPolicyErrors pSSLPolicyErrors) { return true; };
+
+                //lhttpRequest = DirectCast(WebRequest.Create(new Uri(lServiceUrl)), HttpWebRequest);
+                lhttpRequest = (HttpWebRequest)WebRequest.Create(new Uri(lServiceUrl));
+                lhttpRequest.Accept = "application/json";
+                lhttpRequest.ContentType = "application/json";
+                lhttpRequest.KeepAlive = false;
+                lhttpRequest.Method = "GET";
+                lhttpRequest.Headers.Add("Membercode", ConfigurationManager.AppSettings["membercode"].ToString());
+                lhttpRequest.Headers.Add("Login", ConfigurationManager.AppSettings["loginid"].ToString());
+                lhttpRequest.Headers.Add("Token", token);
+
+                //IWebProxy proxy = lhttpRequest.Proxy;
+                //if (proxy != null)
+                //{
+                //    string proxyuri = "http://proxy.bseltd.domain:8080/";
+                //    lhttpRequest.UseDefaultCredentials = true;
+                //    lhttpRequest.Proxy = new WebProxy(proxyuri, false);
+                //    lhttpRequest.Proxy.Credentials = System.Net.CredentialCache.DefaultCredentials;
+                //}
+
+                if (pRequestJson != "")
+                {
+                    byte[] bytes1 = Encoding.UTF8.GetBytes(pRequestJson);
+                    using (Stream stream = lhttpRequest.GetRequestStream())
+                    {
+                        stream.Write(bytes1, 0, bytes1.Length);
+                        stream.Close();
+                    }
+                }
+
+            }
+            catch (Exception ex)
+            {
+                BusinessData.ExceptionLogging.SendErrorToText("", "", ex.Message.ToString());
+                //using (HttpWebResponse httpResponse= DirectCast(lhttpRequest.GetResponse(), HttpWebResponse))
+                //lblresult.Text = ex.Message.ToString();
+            }
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            try
+            {
+                using (HttpWebResponse httpResponse = (HttpWebResponse)lhttpRequest.GetResponse())
+                {
+                    using (Stream strm = httpResponse.GetResponseStream())
+                    {
+                        loutpout_Response = (new StreamReader(strm)).ReadToEnd();
+                        string str = "Request:- " + pRequestJson + " \n Response:-" + loutpout_Response.ToString();
+                        BusinessData.ExceptionLogging.SendErrorToText(pRequestJson, loutpout_Response, lServiceUrl);
+                        //lblopen.Text = str;
+                        //var jsonobj = new JavaScriptSerializer().Deserialize<Dictionary<string, string>>(loutpout_Response);
+                        //string errorcode = jsonobj["errorcode"];
+                        //if (errorcode == "0")
+                        //{
+                        DataTable dt = new DataTable();
+                        dt = (DataTable)JsonConvert.DeserializeObject(loutpout_Response, (typeof(DataTable)));
+                        insertOpenIPO(dt);
+                        //}
+                        //else
+                        //{
+
+                        //}
+
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                BusinessData.ExceptionLogging.SendErrorToText(pRequestJson, loutpout_Response, ex.Message.ToString());
+                //lblresult.Text = ex.Message.ToString();
+            }
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--------------------------------------------------------------------------HTML CONTENT-------------------------------------------------------------------------
+
+
+
+
+
+<%@ Page Title="" Language="C#" MasterPageFile="~/Admin/AdminMaster.Master" AutoEventWireup="true" CodeBehind="AddIPOMaster.aspx.cs" Inherits="ABCIPO.Admin.AddIPOMaster" %>
+
+<asp:Content ID="Content1" ContentPlaceHolderID="head" runat="server">
+</asp:Content>
+<asp:Content ID="Content2" ContentPlaceHolderID="ContentPlaceHolder1" runat="server">
+    <section class="grey-bg">
+
+        <section class="add-media-center-sc">
+            <div class="container">
+                <div class="row">
+                    <div class="col-xl-12 col-lg-12 col-md-12 col-sm-12 col-xs-12">
+                        <div class="dashboard-heading">
+                            <h3>Import IPO Master &nbsp;&nbsp;</h3>
+                        </div>
+                        <a class="uploadmediaredirectanchorpage" href="/Admin/ViewIPOMaster.aspx">View IPO Master</a>
+                    </div>
+                </div>
+
+
+            </div>
+
+            <div class="container bg-white" id="dvupdate" runat="server">
+                 <div class="row mtop-2">
+                    <div class="col-xl-5 col-lg-5 col-md-5 col-sm-12 col-xs-12">
+                        <div class="add-media-label">
+                            <label>Select  Exchange Type<span>*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-xl-7 col-lg-7 col-md-7 col-sm-12 col-xs-12">
+                        <div class="add-media-data">
+                            <div class="add-media-select">
+                                <asp:DropDownList ID="exchangeDropDown" runat="server" OnSelectedIndexChanged="exchangeDropDown_SelectedIndexChanged" AutoPostBack="true">
+                            <asp:ListItem Value="">Select Exchange Type</asp:ListItem>
+                            <asp:ListItem Value="NSE">NSE</asp:ListItem>
+		                    <asp:ListItem Value="BSE" >BSE</asp:ListItem>
+                        </asp:DropDownList>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                
+                <div class="row mtop-2" id="issuetype"  runat="server">
+                    <div class="col-xl-5 col-lg-5 col-md-5 col-sm-12 col-xs-12">
+                        <div class="add-media-label">
+                            <label>Select  Issue Type<span>*</span></label>
+                        </div>
+                    </div>
+                    <div class="col-xl-7 col-lg-7 col-md-7 col-sm-12 col-xs-12">
+                        <div class="add-media-data">
+                            <div class="add-media-select">
+                                <asp:DropDownList ID="drpisutype" runat="server"  >
+                            <asp:ListItem Value="">Select Issue Type</asp:ListItem>
+                            <asp:ListItem Value="BB">Book Building</asp:ListItem>
+		                    <asp:ListItem Value="REIT">Book Building REITs</asp:ListItem>
+                        </asp:DropDownList>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mtop-2">
+                    <div class="col-xl-5 col-lg-5 col-md-5 col-sm-12 col-xs-12">
+                    </div>
+                    <div class="col-xl-7 col-lg-7 col-md-7 col-sm-12 col-xs-12">
+                        <%--<a  class="add-media-create" id="btn1">Create</a>--%>
+                        <%--<asp:Button ID="btnSubmit" runat="server" CssClass="add-media-create" Text="Submit" OnClick="btnUpdate_Click" OnClientClick="return validatedata();" />--%>
+                        <asp:Button ID="btnGo" runat="server" CssClass="add-media-create" Text="Fetch IPO" OnClientClick="return submitdata();" OnClick="btnGoNew_Click" />
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </section>
+  <script language="javascript">
+        function submitdata() {
+            debugger;
+            var exchange = document.getElementById("<%=exchangeDropDown.ClientID%>").value;
+            var issutype = document.getElementById("<%=drpisutype.ClientID%>").value;
+            if (exchange == "BSE") {
+            var issutype1 = document.getElementById(issuetype.ClientID);
+            issutype1.style.display = "flex";
+            if (issutype == "") {
+            alert("Please Select Issue Type");
+            document.getElementById("<%=drpisutype.ClientID%>").focus();   
+                
+            return false;
+            }
+            }
+            else {
+                //alert(hii);
+                //  var issutypedropdown = document.getElementById("issuetype.ClientID");
+                //  issutypedropdown.style.display = "none";
+               
+            }
+        }
+
+</script>
+
+</asp:Content>
